@@ -26,9 +26,10 @@ export interface Panel {
 }
 
 export interface PanelOptions {
-  /** Start a run. Returns false if the request could not be sent, so the panel does not
-   *  enter (and get stuck in) the in-flight state. */
-  onRun(prompt: string): boolean
+  /** Start a run. `resetFirst` is the "reset to neutral before each run" toggle state.
+   *  Returns false if the request could not be sent, so the panel does not enter (and get
+   *  stuck in) the in-flight state. */
+  onRun(prompt: string, resetFirst: boolean): boolean
 }
 
 // A few starting points: three feelings and one situation. Emotional vocabulary
@@ -77,6 +78,10 @@ export function createPanel(container: HTMLElement, opts: PanelOptions): Panel {
         <button type="submit" class="run-btn">Run</button>
       </div>
       <div class="chips"></div>
+      <label class="run-opt">
+        <input type="checkbox" class="reset-toggle" checked />
+        <span>Reset to neutral before each run</span>
+      </label>
     </form>
 
     <section class="log-wrap" aria-live="polite">
@@ -97,13 +102,19 @@ export function createPanel(container: HTMLElement, opts: PanelOptions): Panel {
   const input = $<HTMLInputElement>('#prompt-input')
   const runBtn = $<HTMLButtonElement>('.run-btn')
   const chipsEl = $<HTMLDivElement>('.chips')
+  const resetToggle = $<HTMLInputElement>('.reset-toggle')
   const logEl = $<HTMLOListElement>('.log')
 
   let status: ConnectionStatus = 'connecting'
   let running = false
 
-  function refreshRunEnabled(): void {
+  // Sync every control derived from (running, status): the Run button's enabled
+  // state, and whether the status dot pulses. The dot pulses ONLY while a run is
+  // in flight (data-running drives the CSS) — a still dot means connected-and-idle,
+  // so the indicator reads as honest activity, not a perpetual "loading" heartbeat.
+  function syncControls(): void {
     runBtn.disabled = running || status !== 'connected'
+    statusEl.setAttribute('data-running', String(running))
   }
 
   function submit(prompt: string): void {
@@ -112,9 +123,9 @@ export function createPanel(container: HTMLElement, opts: PanelOptions): Panel {
     input.value = trimmed
     // Only enter the in-flight state if the request actually went out; a failed send
     // (socket not open) must not leave Run stuck disabled.
-    if (opts.onRun(trimmed)) {
+    if (opts.onRun(trimmed, resetToggle.checked)) {
       running = true
-      refreshRunEnabled()
+      syncControls()
     }
   }
 
@@ -141,7 +152,7 @@ export function createPanel(container: HTMLElement, opts: PanelOptions): Panel {
     if (next !== 'connected') running = false
     statusEl.setAttribute('data-status', next)
     statusText.textContent = STATUS_LABEL[next]
-    refreshRunEnabled()
+    syncControls()
   }
 
   function log(kind: LogKind, text: string): void {
@@ -169,13 +180,13 @@ export function createPanel(container: HTMLElement, opts: PanelOptions): Panel {
 
   function runStarted(prompt: string): void {
     running = true
-    refreshRunEnabled()
+    syncControls()
     log('runStarted', prompt)
   }
 
   function runEnded(text?: string): void {
     running = false
-    refreshRunEnabled()
+    syncControls()
     log('runEnded', text ?? 'run complete')
   }
 

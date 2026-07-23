@@ -13,4 +13,11 @@ export type ServerMessage =
   | { type: 'reset' }
   | { type: 'runEnded'; finalVector: FaceVector }
 
-export type ClientMessage = { type: 'run'; prompt: string }
+export type ClientMessage = {
+  type: 'run'
+  prompt: string
+  /** Snap the face back to neutral before this run. Omitted/true → each run starts fresh
+   *  (the historical behavior); false → continue the tween from the pose the last run
+   *  settled into, so expressions can be chained (e.g. curious → suspicious). */
+  resetFirst?: boolean
+}

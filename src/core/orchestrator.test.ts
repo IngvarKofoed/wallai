@@ -84,6 +84,26 @@ describe('Orchestrator.run', () => {
     expect(h.llm.calls).toHaveLength(3)
   })
 
+  it('announces the current pose in the first message when continuing without a reset', async () => {
+    const h = harness([out(block('gaze.x 1\ndone'))])
+    // Simulate the pose a skipped-reset run carries in from the previous run.
+    h.faceState.apply([
+      { set: { 'gaze.x': -0.8, 'eye.open': 0.3 }, tweenMs: 0, holdMs: 0 },
+    ])
+    await h.orchestrator.run('suspicious', h.emit, { announceStartPose: true })
+    const first = h.llm.calls[0].messages[0]
+    expect(first.role).toBe('user')
+    expect(first.content).toContain('currently reads')
+    expect(first.content).toContain('gaze.x=-0.80')
+    expect(first.content).toContain('eye.open=0.30')
+  })
+
+  it('omits the pose announcement on a normal (reset) run', async () => {
+    const h = harness([out(block('gaze.x 1\ndone'))])
+    await h.orchestrator.run('curious', h.emit)
+    expect(h.llm.calls[0].messages[0].content).not.toContain('currently reads')
+  })
+
   it('feeds parse errors back and continues the loop', async () => {
     const h = harness([out(block('eye.wink 1')), out(block('gaze.x 0.2\ndone'))])
     await h.orchestrator.run('suspicious', h.emit)

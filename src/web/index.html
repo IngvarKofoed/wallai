@@ -200,6 +200,12 @@
       .status[data-status="connected"] .status-dot {
         background: var(--accent);
         box-shadow: 0 0 0 3px rgba(224, 160, 90, 0.18);
+      }
+      /* Pulse ONLY while a run is in flight — an honest "working now" signal.
+         A steady dot means connected-and-idle, so it no longer reads as a
+         perpetual loading spinner. The pulse keyframe rests at the same 3px ring
+         as the static state, so entering/leaving the animation doesn't jump. */
+      .status[data-status="connected"][data-running="true"] .status-dot {
         animation: pulse 2.4s ease-in-out infinite;
       }
       .status[data-status="connecting"] .status-dot {
@@ -286,6 +292,32 @@
         background: #263039;
         color: var(--muted-dim);
         cursor: not-allowed;
+      }
+
+      /* Run option: whether a run first snaps the face back to neutral. */
+      .run-opt {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 16px;
+        font-size: 12.5px;
+        color: var(--muted);
+        cursor: pointer;
+        user-select: none;
+      }
+      .run-opt:hover {
+        color: var(--text);
+      }
+      .run-opt input {
+        flex: none;
+        width: 15px;
+        height: 15px;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+      .run-opt input:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
       }
 
       .chips {

@@ -18,7 +18,7 @@ function mount(): void {
   // onRun closure reads it lazily (it is only ever called after wiring).
   let ws: WsClient
   const panel = createPanel(panelHost, {
-    onRun: (prompt) => ws.sendRun(prompt),
+    onRun: (prompt, resetFirst) => ws.sendRun(prompt, resetFirst),
   })
 
   ws = createWs({ face, panel })

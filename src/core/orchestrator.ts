@@ -56,14 +56,23 @@ export class Orchestrator {
   async run(
     userPrompt: string,
     emit: (m: ServerMessage) => void,
+    opts: { announceStartPose?: boolean } = {},
   ): Promise<FaceVector> {
     const contribution = this.codec.describe()
     const system = buildSystemPrompt(contribution)
     const tools = contribution.tools
 
-    const messages: ChatMessage[] = [
-      { role: 'user', content: userPrompt + '\n\nExpress this with the face.' },
-    ]
+    // When the caller skipped the neutral reset, the face carries the previous run's pose.
+    // Tell the model where it actually starts, or it reasons as if from neutral and silently
+    // keeps whatever params it doesn't set. On a fresh (reset) run the message is left as-is
+    // so existing default-run behavior is unchanged.
+    const firstMessage = opts.announceStartPose
+      ? `The face currently reads: ${formatVector(this.faceState.current())}.\n\n` +
+        userPrompt +
+        '\n\nExpress this with the face, animating from its current pose.'
+      : userPrompt + '\n\nExpress this with the face.'
+
+    const messages: ChatMessage[] = [{ role: 'user', content: firstMessage }]
 
     emit({ type: 'runStarted', prompt: userPrompt })
 

@@ -34,7 +34,11 @@ const { orchestrator, faceState, renderer } = buildOrchestrator(broadcast)
 
 let running = false
 
-async function handleRun(prompt: string, requester?: WebSocket): Promise<void> {
+async function handleRun(
+  prompt: string,
+  resetFirst: boolean,
+  requester?: WebSocket,
+): Promise<void> {
   if (running) {
     // A run is already in flight (single-flight). Tell the requester so the click isn't
     // silently swallowed; its Run button re-enables when the in-flight run's runEnded
@@ -52,12 +56,17 @@ async function handleRun(prompt: string, requester?: WebSocket): Promise<void> {
   }
   running = true
   try {
-    // Reset BOTH the authoritative server state and the browser visual, so each run starts
-    // from neutral and the two never diverge (ARCHITECTURE §6). Resetting only the renderer
-    // would leave FaceState carrying the previous run's pose into this one.
-    faceState.reset()
-    await renderer.reset()
-    await orchestrator.run(prompt, broadcast)
+    if (resetFirst) {
+      // Reset BOTH the authoritative server state and the browser visual, so the run starts
+      // from neutral and the two never diverge (ARCHITECTURE §6). Resetting only the renderer
+      // would leave FaceState carrying the previous run's pose into this one. When the client
+      // opts out, we skip this and continue from the pose the last run settled into.
+      faceState.reset()
+      await renderer.reset()
+    }
+    // Not resetting means the face carries the prior pose; announce it so the model reasons
+    // from where the face actually is rather than assuming neutral.
+    await orchestrator.run(prompt, broadcast, { announceStartPose: !resetFirst })
   } catch (err) {
     const text = err instanceof Error ? err.message : String(err)
     broadcast({ type: 'transcript', kind: 'error', text: `run failed: ${text}` })
@@ -131,7 +140,8 @@ wss.on('connection', (ws) => {
         )
         return
       }
-      void handleRun(msg.prompt, ws)
+      // Default to a fresh start (reset) unless the client explicitly opts out with false.
+      void handleRun(msg.prompt, msg.resetFirst !== false, ws)
     }
   })
 

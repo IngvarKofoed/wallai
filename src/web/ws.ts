@@ -17,9 +17,11 @@ const WS_PORT =
   ) || 8787
 
 export interface WsClient {
-  /** Ask the server to run a feeling/situation prompt. Returns false if the request could
-   *  not be sent (socket not open), so the caller doesn't enter an in-flight state. */
-  sendRun(prompt: string): boolean
+  /** Ask the server to run a feeling/situation prompt. `resetFirst` controls whether the
+   *  face snaps to neutral before the run (false continues from the current pose). Returns
+   *  false if the request could not be sent (socket not open), so the caller doesn't enter
+   *  an in-flight state. */
+  sendRun(prompt: string, resetFirst: boolean): boolean
 }
 
 export interface WsDeps {
@@ -105,12 +107,12 @@ export function createWs({ face, panel }: WsDeps): WsClient {
     window.setTimeout(connect, wait)
   }
 
-  function sendRun(prompt: string): boolean {
+  function sendRun(prompt: string, resetFirst: boolean): boolean {
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       panel.log('error', 'not connected — cannot start run')
       return false
     }
-    const msg: ClientMessage = { type: 'run', prompt }
+    const msg: ClientMessage = { type: 'run', prompt, resetFirst }
     socket.send(JSON.stringify(msg))
     return true
   }

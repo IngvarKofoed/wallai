@@ -43,3 +43,15 @@ Each entry is numbered with a monotonically increasing integer. Append new entri
 9. The frontend (Vite) dev server now defaults to port 8989 instead of the crowded 5173.
    `npm run dev` still starts both it and the WebSocket server (8787) together.
 
+10. The status dot now pulses only while a run is in flight, not perpetually while connected —
+    a steady "live" dot means connected-and-idle. The old infinite pulse read as a constant
+    "loading" spinner even when nothing was happening. The panel reflects its in-flight flag as
+    `data-running` on the status element; the CSS gates the pulse on it.
+
+11. The reset-to-neutral between runs is now optional, via a panel checkbox (default on).
+    When off, a run continues the tween from the pose the previous run settled into, so
+    expressions can be chained (curious → suspicious) without snapping through neutral.
+    `run` messages carry `resetFirst` (default true). On a no-reset run the orchestrator
+    seeds the model with the current pose, so it reasons from where the face actually is
+    instead of assuming neutral and silently keeping unset params.
+
