@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>wallai — expression instrument</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        --bg: #0b0f14;
+        --panel: #0e141b;
+        --line: #1e2730;
+        --line-soft: #161d25;
+        --text: #e6ecf2;
+        --muted: #7d8a97;
+        --muted-dim: #55616d;
+        --accent: #e0a05a;
+        --danger: #d97a6c;
+        --think: #8fa9bb;
+        --dsl: #9fb27a;
+
+        --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+        --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas,
+          monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        -webkit-font-smoothing: antialiased;
+        overflow: hidden;
+      }
+
+      .app {
+        display: flex;
+        height: 100vh;
+        height: 100dvh;
+      }
+
+      /* ── Stage: the face in a softly lit well ─────────────────────────── */
+      .stage {
+        position: relative;
+        flex: 1 1 auto;
+        min-width: 0;
+        display: grid;
+        place-items: center;
+        padding: clamp(16px, 4vw, 56px);
+        background: radial-gradient(
+          circle at 50% 42%,
+          #151d26 0%,
+          #0d1218 58%,
+          var(--bg) 100%
+        );
+      }
+
+      .stage::after {
+        /* a faint observation grid, quiet in the background */
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image: linear-gradient(var(--line-soft) 1px, transparent 1px),
+          linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+        background-size: 44px 44px;
+        mask-image: radial-gradient(circle at 50% 42%, #000 0%, transparent 70%);
+        opacity: 0.35;
+        pointer-events: none;
+      }
+
+      .face-frame {
+        position: relative;
+        width: min(64vh, 100%, 620px);
+        z-index: 1;
+      }
+
+      .face-svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.55));
+      }
+
+      /* Face geometry — pure shapes, no emotion baked in. */
+      .face-plate {
+        fill: #121a22;
+        stroke: var(--line);
+        stroke-width: 1;
+      }
+      .sclera {
+        fill: #e9eef3;
+      }
+      .rim {
+        fill: none;
+        stroke: #9aa7b2;
+        stroke-width: 1.5;
+        opacity: 0.35;
+      }
+      .iris {
+        fill: #6f93a6;
+      }
+      .pupil {
+        fill: #0b1015;
+      }
+      .glint {
+        fill: #ffffff;
+        opacity: 0.85;
+      }
+      .brow {
+        fill: #c7d0d9;
+      }
+      .mouth {
+        fill: none;
+        stroke: #98a2ac;
+        stroke-width: 5;
+        stroke-linecap: round;
+      }
+
+      .stage-caption {
+        position: absolute;
+        left: 50%;
+        bottom: clamp(14px, 3vh, 32px);
+        transform: translateX(-50%);
+        z-index: 1;
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted-dim);
+      }
+
+      /* ── Panel ─────────────────────────────────────────────────────────── */
+      .panel {
+        flex: 0 0 380px;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        background: var(--panel);
+        border-left: 1px solid var(--line);
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 22px 24px 18px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .wordmark {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      .wordmark .mark {
+        font-size: 19px;
+        font-weight: 620;
+        letter-spacing: 0.02em;
+      }
+      .wordmark .sub {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+        padding-top: 3px;
+      }
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--muted-dim);
+        flex: none;
+      }
+      .status[data-status="connected"] {
+        color: var(--accent);
+      }
+      .status[data-status="connected"] .status-dot {
+        background: var(--accent);
+        box-shadow: 0 0 0 3px rgba(224, 160, 90, 0.18);
+        animation: pulse 2.4s ease-in-out infinite;
+      }
+      .status[data-status="connecting"] .status-dot {
+        background: #b7873f;
+        animation: blink 1s steps(2, start) infinite;
+      }
+      .status[data-status="disconnected"] {
+        color: var(--danger);
+      }
+      .status[data-status="disconnected"] .status-dot {
+        background: var(--danger);
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          box-shadow: 0 0 0 3px rgba(224, 160, 90, 0.18);
+        }
+        50% {
+          box-shadow: 0 0 0 6px rgba(224, 160, 90, 0.04);
+        }
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0.3;
+        }
+      }
+
+      /* ── Run form ──────────────────────────────────────────────────────── */
+      .run-form {
+        padding: 20px 24px 18px;
+        border-bottom: 1px solid var(--line);
+      }
+      .field-label {
+        display: block;
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 9px;
+      }
+      .field-row {
+        display: flex;
+        gap: 8px;
+      }
+      .prompt-input {
+        flex: 1 1 auto;
+        min-width: 0;
+        background: #0a0e13;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--text);
+        font-family: var(--sans);
+        font-size: 14px;
+        padding: 10px 12px;
+      }
+      .prompt-input::placeholder {
+        color: var(--muted-dim);
+      }
+      .prompt-input:focus-visible {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(224, 160, 90, 0.14);
+      }
+      .run-btn {
+        flex: none;
+        background: var(--accent);
+        color: #1b120a;
+        border: none;
+        border-radius: 8px;
+        font-family: var(--sans);
+        font-size: 14px;
+        font-weight: 600;
+        padding: 10px 18px;
+        cursor: pointer;
+        transition: background 0.15s ease, opacity 0.15s ease;
+      }
+      .run-btn:hover:not(:disabled) {
+        background: #ecb073;
+      }
+      .run-btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .run-btn:disabled {
+        background: #263039;
+        color: var(--muted-dim);
+        cursor: not-allowed;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin-top: 14px;
+      }
+      .chip {
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        font-family: var(--sans);
+        font-size: 12.5px;
+        padding: 5px 12px;
+        cursor: pointer;
+        transition: border-color 0.15s ease, color 0.15s ease;
+      }
+      .chip:hover {
+        border-color: var(--accent);
+        color: var(--text);
+      }
+      .chip:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      /* ── Transcript log ────────────────────────────────────────────────── */
+      .log-wrap {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        padding: 18px 24px 8px;
+      }
+      .log-head {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--muted-dim);
+        margin-bottom: 10px;
+      }
+      .log {
+        list-style: none;
+        margin: 0;
+        padding: 0 0 12px;
+        overflow-y: auto;
+        flex: 1 1 auto;
+        min-height: 0;
+        font-family: var(--mono);
+        font-size: 12.5px;
+        line-height: 1.5;
+      }
+      .log-entry {
+        display: flex;
+        gap: 10px;
+        padding: 5px 0;
+        border-bottom: 1px solid var(--line-soft);
+      }
+      .log-tag {
+        flex: none;
+        width: 46px;
+        color: var(--muted-dim);
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        padding-top: 2px;
+      }
+      .log-body {
+        color: var(--text);
+        white-space: pre-wrap;
+        word-break: break-word;
+        min-width: 0;
+      }
+      .kind-error .log-tag,
+      .kind-error .log-body {
+        color: var(--danger);
+      }
+      .kind-reasoning .log-tag {
+        color: var(--think);
+      }
+      .kind-reasoning .log-body {
+        color: #c3ccd4;
+      }
+      .kind-program .log-tag {
+        color: var(--dsl);
+      }
+      .kind-state .log-tag,
+      .kind-state .log-body {
+        color: var(--accent);
+      }
+      .kind-runStarted .log-tag,
+      .kind-runEnded .log-tag {
+        color: var(--muted);
+      }
+      .kind-runStarted .log-body,
+      .kind-runEnded .log-body {
+        color: var(--muted);
+      }
+
+      /* ── Responsive: panel drops below on narrow viewports ─────────────── */
+      @media (max-width: 820px) {
+        body {
+          overflow: auto;
+        }
+        .app {
+          flex-direction: column;
+          height: auto;
+          min-height: 100dvh;
+        }
+        .stage {
+          min-height: 56vh;
+        }
+        .panel {
+          flex: 1 1 auto;
+          border-left: none;
+          border-top: 1px solid var(--line);
+        }
+        .log {
+          max-height: 40vh;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .status-dot {
+          animation: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <main class="stage">
+        <div class="face-frame" id="face"></div>
+        <div class="stage-caption">mechanical parameters · eyes · brows · gaze</div>
+      </main>
+      <aside class="panel" id="panel"></aside>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

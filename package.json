@@ -1,0 +1,29 @@
+{
+  "name": "wallai",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "vite build",
+    "dev:web": "vite",
+    "dev:server": "tsx watch src/server/index.ts",
+    "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:web\""
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
+    "dotenv": "^17.4.2",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.2",
+    "@types/ws": "^8.18.1",
+    "concurrently": "^9.2.1",
+    "happy-dom": "^20.0.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.12",
+    "vitest": "^3.2.4"
+  }
+}
