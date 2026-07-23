@@ -30,6 +30,10 @@ export interface PanelOptions {
    *  Returns false if the request could not be sent, so the panel does not enter (and get
    *  stuck in) the in-flight state. */
   onRun(prompt: string, resetFirst: boolean): boolean
+  /** Notified whenever the in-flight state changes — true from a successful Run submit
+   *  until runEnded (or a disconnect clears it). Lets a caller drive a run-scoped indicator
+   *  such as the face's thinking chrome off the same flag that gates the Run button. */
+  onRunningChange?(running: boolean): void
 }
 
 // A few starting points: three feelings and one situation. Emotional vocabulary
@@ -115,6 +119,8 @@ export function createPanel(container: HTMLElement, opts: PanelOptions): Panel {
   function syncControls(): void {
     runBtn.disabled = running || status !== 'connected'
     statusEl.setAttribute('data-running', String(running))
+    // Same flag drives the face's thinking chrome, so it spans exactly the run window.
+    opts.onRunningChange?.(running)
   }
 
   function submit(prompt: string): void {

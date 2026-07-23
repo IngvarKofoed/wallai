@@ -126,6 +126,59 @@
         stroke-linecap: round;
       }
 
+      /* ── Thinking chrome ──────────────────────────────────────────────────
+         Shown only while a run is in flight (the face SVG carries
+         data-thinking="true" for the whole run). A rotating sweep + a pulsing
+         bezel ring read as "the instrument is computing" — deliberately around
+         the plate, never on the features, so it can't be read as an expression. */
+      .think-ring,
+      .think-sweep {
+        fill: none;
+        stroke: var(--accent);
+        opacity: 0; /* hidden unless thinking */
+        transition: opacity 0.4s ease;
+        pointer-events: none;
+      }
+      .think-ring {
+        stroke-width: 1;
+      }
+      .think-sweep {
+        stroke-width: 2.5;
+        stroke-linecap: round;
+        /* pathLength=100 normalises the oval's perimeter to 100, so the dash is a
+           % of the outline and the offset loop is seamless regardless of rx/ry.
+           12 visible + 88 gap = one short arc that travels the oval edge. */
+        stroke-dasharray: 12 88;
+        filter: drop-shadow(0 0 4px rgba(224, 160, 90, 0.5));
+      }
+      .face-svg[data-thinking="true"] .think-ring {
+        animation: think-glow 2.4s ease-in-out infinite;
+      }
+      .face-svg[data-thinking="true"] .think-sweep {
+        opacity: 0.9;
+        animation: think-sweep 2s linear infinite;
+      }
+
+      @keyframes think-glow {
+        0%,
+        100% {
+          opacity: 0.08;
+        }
+        50% {
+          opacity: 0.2;
+        }
+      }
+      @keyframes think-sweep {
+        /* Travel the dash one full oval (pathLength units) → the arc rides the
+           oval outline instead of a circle, so it follows the face shape. */
+        from {
+          stroke-dashoffset: 0;
+        }
+        to {
+          stroke-dashoffset: -100;
+        }
+      }
+
       .stage-caption {
         position: absolute;
         left: 50%;
@@ -445,6 +498,16 @@
       @media (prefers-reduced-motion: reduce) {
         .status-dot {
           animation: none !important;
+        }
+        /* No motion: drop the rotating sweep and hold the bezel ring steady, so
+           "thinking" is still shown as a visible ring, just not animated. */
+        .face-svg[data-thinking="true"] .think-ring {
+          animation: none;
+          opacity: 0.22;
+        }
+        .face-svg[data-thinking="true"] .think-sweep {
+          animation: none;
+          opacity: 0;
         }
       }
     </style>

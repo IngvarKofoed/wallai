@@ -19,6 +19,9 @@ function mount(): void {
   let ws: WsClient
   const panel = createPanel(panelHost, {
     onRun: (prompt, resetFirst) => ws.sendRun(prompt, resetFirst),
+    // Drive the face's thinking chrome off the panel's in-flight flag: on from a
+    // successful Run submit until the run ends (or a disconnect clears it).
+    onRunningChange: (running) => face.setThinking(running),
   })
 
   ws = createWs({ face, panel })

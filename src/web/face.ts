@@ -137,10 +137,14 @@ export interface Face {
   reset(): Promise<void>
   /** The current live vector. */
   getVector(): FaceVector
+  /** Toggle the "thinking" instrument chrome — a sweep + pulse ring around the
+   *  face plate shown while a run is in flight. Pure decoration: it never moves a
+   *  face parameter, so it can't be mistaken for (or corrupt) a model-authored pose. */
+  setThinking(on: boolean): void
 }
 
 const SVG_MARKUP = `
-<svg class="face-svg" viewBox="0 0 ${VIEW.w} ${VIEW.h}" role="img"
+<svg class="face-svg" data-thinking="false" viewBox="0 0 ${VIEW.w} ${VIEW.h}" role="img"
      aria-label="mechanical face" preserveAspectRatio="xMidYMid meet">
   <defs>
     <clipPath id="clip-left"><ellipse id="clip-left-e" /></clipPath>
@@ -148,6 +152,14 @@ const SVG_MARKUP = `
   </defs>
 
   <ellipse class="face-plate" cx="180" cy="140" rx="158" ry="132" />
+
+  <!-- Instrument chrome: shown only while a run is in flight (data-thinking). A rotating
+       sweep + a pulsing bezel ring signal "computing" around the plate. Purely decorative
+       geometry behind the features — the face itself never moves for this. -->
+  <g class="think" aria-hidden="true">
+    <ellipse class="think-ring" cx="180" cy="140" rx="150" ry="124" />
+    <ellipse class="think-sweep" cx="180" cy="140" rx="150" ry="124" pathLength="100" />
+  </g>
 
   <rect id="brow-left" class="brow" rx="4" />
   <rect id="brow-right" class="brow" rx="4" />
@@ -187,6 +199,8 @@ export function createFace(container: HTMLElement): Face {
     if (!el) throw new Error(`face: missing element ${sel}`)
     return el
   }
+
+  const svgEl = $<SVGSVGElement>('.face-svg')
 
   const refs = {
     eyeLeft: $<SVGEllipseElement>('#eye-left'),
@@ -310,8 +324,14 @@ export function createFace(container: HTMLElement): Face {
     return { ...current }
   }
 
+  // Toggle the thinking chrome via a data attribute; the CSS gates the sweep/pulse on it.
+  // Only the SVG root's attribute changes — render() never touches it, so it survives poses.
+  function setThinking(on: boolean): void {
+    svgEl.setAttribute('data-thinking', String(on))
+  }
+
   render()
-  return { setVector, playTimeline, reset, getVector }
+  return { setVector, playTimeline, reset, getVector, setThinking }
 }
 
 // Re-export the param order for callers that want to display the vector.

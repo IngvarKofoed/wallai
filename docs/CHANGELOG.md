@@ -55,3 +55,12 @@ Each entry is numbered with a monotonically increasing integer. Append new entri
     seeds the model with the current pose, so it reasons from where the face actually is
     instead of assuming neutral and silently keeping unset params.
 
+12. A "thinking" indicator now shows while a run is in flight: a sweep arc that travels the
+    oval plate edge + a pulsing bezel ring (`data-thinking` on the SVG root). The sweep is a
+    dash animated along a fixed ellipse via `pathLength=100` (not a rotated shape), so it
+    hugs the oval instead of cutting across it, and loops seamlessly at any rx/ry. It is instrument
+    chrome only — deliberately never a face parameter, so it can't be mistaken for or
+    corrupt a model-authored expression. Driven off the panel's existing in-flight flag
+    (Run submit → runEnded), so it needs no protocol change and spans the whole run, not
+    just the LLM-wait gaps. Honors `prefers-reduced-motion` (static ring, no sweep).
+
