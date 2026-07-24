@@ -59,7 +59,9 @@ describe('Orchestrator.run', () => {
   it('applies a program, ends on done, and returns the settled vector', async () => {
     const h = harness([out(block('gaze.x 1\ndone'))])
     const final = await h.orchestrator.run('curious', h.emit)
-    expect(final['gaze.x']).toBe(1)
+    // `gaze.x 1` is symmetric shorthand — it sets both eyes.
+    expect(final['gaze.x.l']).toBe(1)
+    expect(final['gaze.x.r']).toBe(1)
     expect(h.llm.calls).toHaveLength(1)
     expect(h.renderer.played).toHaveLength(1)
     expect(h.events.at(-1)).toEqual({ type: 'runEnded', finalVector: final })
@@ -86,9 +88,14 @@ describe('Orchestrator.run', () => {
 
   it('announces the current pose in the first message when continuing without a reset', async () => {
     const h = harness([out(block('gaze.x 1\ndone'))])
-    // Simulate the pose a skipped-reset run carries in from the previous run.
+    // Simulate the pose a skipped-reset run carries in from the previous run. Both sides
+    // share a value, so formatVector reports the collapsed (symmetric) control name.
     h.faceState.apply([
-      { set: { 'gaze.x': -0.8, 'eye.open': 0.3 }, tweenMs: 0, holdMs: 0 },
+      {
+        set: { 'gaze.x.l': -0.8, 'gaze.x.r': -0.8, 'eye.open.l': 0.3, 'eye.open.r': 0.3 },
+        tweenMs: 0,
+        holdMs: 0,
+      },
     ])
     await h.orchestrator.run('suspicious', h.emit, { announceStartPose: true })
     const first = h.llm.calls[0].messages[0]

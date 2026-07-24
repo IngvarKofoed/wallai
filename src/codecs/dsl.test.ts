@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { DslCodec } from './dsl'
 import { DEFAULT_TWEEN_MS } from '../core/timeline'
+import { sidesOf, type ControlName } from '../core/params'
 import type { ModelOutput } from '../core/llm-types'
 
 const codec = new DslCodec()
@@ -8,6 +9,14 @@ const codec = new DslCodec()
 const out = (text: string): ModelOutput => ({ text })
 
 const block = (body: string): string => '```face\n' + body + '\n```'
+
+/** Expand a control→value map into the per-side set that symmetric shorthand produces,
+ *  so a test can say `sym({ 'eye.open': 1 })` and mean "both eyes fully open". */
+const sym = (m: Record<string, number>): Record<string, number> => {
+  const set: Record<string, number> = {}
+  for (const [c, v] of Object.entries(m)) for (const s of sidesOf(c as ControlName)) set[s] = v
+  return set
+}
 
 describe('DslCodec.describe', () => {
   const { instructions, tools } = codec.describe()
@@ -24,12 +33,20 @@ describe('DslCodec.describe', () => {
     expect(instructions).toContain('done')
   })
 
-  it('documents every parameter with its range, generated from PARAMS', () => {
+  it('documents every control with its range, generated from CONTROLS', () => {
     expect(instructions).toContain('eye.open')
     expect(instructions).toContain('eye.pupil')
     expect(instructions).toContain('brow.angle')
     expect(instructions).toContain('gaze.x')
     expect(instructions).toContain('gaze.y')
+  })
+
+  it('teaches the per-side suffix and symmetric shorthand', () => {
+    expect(instructions).toContain('.l')
+    expect(instructions).toContain('.r')
+    expect(instructions).toContain('both sides')
+    // the worked asymmetric example uses a per-side parameter
+    expect(instructions).toContain('eye.open.l')
   })
 
   it('stays mechanical, never emotional', () => {
@@ -38,7 +55,7 @@ describe('DslCodec.describe', () => {
 })
 
 describe('DslCodec.parse — single pose', () => {
-  it('parses a single pose into a one-step timeline', () => {
+  it('parses a single pose into a one-step timeline, expanding shorthand to both sides', () => {
     const result = codec.parse(
       out(
         block(
@@ -58,7 +75,7 @@ describe('DslCodec.parse — single pose', () => {
     if (!result.ok) return
     expect(result.timeline).toHaveLength(1)
     expect(result.timeline[0]).toEqual({
-      set: { 'brow.angle': 1.0, 'eye.open': 1.0, 'eye.pupil': 0.7, 'gaze.y': 0.2 },
+      set: sym({ 'brow.angle': 1.0, 'eye.open': 1.0, 'eye.pupil': 0.7, 'gaze.y': 0.2 }),
       tweenMs: 350,
       holdMs: 0,
     })
@@ -71,6 +88,23 @@ describe('DslCodec.parse — single pose', () => {
     if (!result.ok) return
     expect(result.timeline).toHaveLength(1)
     expect(result.timeline[0].tweenMs).toBe(DEFAULT_TWEEN_MS)
+  })
+})
+
+describe('DslCodec.parse — per-side (asymmetry)', () => {
+  it('sets a single side from a per-side parameter name', () => {
+    const result = codec.parse(out(block('eye.open.l 0')))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.timeline[0].set).toEqual({ 'eye.open.l': 0 })
+  })
+
+  it('lets a later per-side set override one side of an earlier shorthand', () => {
+    // shorthand sets both eyes to 0.5, then the left is pulled shut — a wink.
+    const result = codec.parse(out(block('eye.open 0.5 ; eye.open.l 0')))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.timeline[0].set).toEqual({ 'eye.open.l': 0, 'eye.open.r': 0.5 })
   })
 })
 
@@ -93,12 +127,12 @@ describe('DslCodec.parse — timed sequence', () => {
     if (!result.ok) return
     expect(result.timeline).toHaveLength(2)
     expect(result.timeline[0]).toEqual({
-      set: { 'gaze.x': -0.8, 'eye.open': 0.5, 'brow.angle': -0.3 },
+      set: sym({ 'gaze.x': -0.8, 'eye.open': 0.5, 'brow.angle': -0.3 }),
       tweenMs: 120,
       holdMs: 500,
     })
     expect(result.timeline[1]).toEqual({
-      set: { 'gaze.x': 0, 'eye.open': 0.8, 'brow.angle': 0 },
+      set: sym({ 'gaze.x': 0, 'eye.open': 0.8, 'brow.angle': 0 }),
       tweenMs: 300,
       holdMs: 0,
     })
@@ -115,12 +149,24 @@ describe('DslCodec.parse — validation', () => {
     expect(result.errors[0]).toContain('eye.wink')
   })
 
+  it('rejects an unknown side suffix with a hint at the valid forms', () => {
+    const result = codec.parse(out(block('eye.open.x 0.5')))
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.errors[0]).toContain('eye.open.x')
+    // the control is known, so the model is told the side was the problem
+    expect(result.errors[0]).toContain('eye.open.l')
+    expect(result.errors[0]).toContain('eye.open.r')
+  })
+
   it('clamps an out-of-range value instead of rejecting the program', () => {
     const result = codec.parse(out(block('eye.open 1.5\ngaze.x -9')))
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.timeline[0].set['eye.open']).toBe(1)
-    expect(result.timeline[0].set['gaze.x']).toBe(-1)
+    expect(result.timeline[0].set['eye.open.l']).toBe(1)
+    expect(result.timeline[0].set['eye.open.r']).toBe(1)
+    expect(result.timeline[0].set['gaze.x.l']).toBe(-1)
+    expect(result.timeline[0].set['gaze.x.r']).toBe(-1)
   })
 
   it('rejects a non-numeric value', () => {
@@ -194,7 +240,7 @@ describe('DslCodec.parse — extraction', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.timeline).toHaveLength(1)
-    expect(result.timeline[0].set).toEqual({ 'gaze.x': 0.4, 'eye.open': 0.4 })
+    expect(result.timeline[0].set).toEqual(sym({ 'gaze.x': 0.4, 'eye.open': 0.4 }))
   })
 
   it('uses the LAST face block when several are present', () => {
@@ -203,7 +249,7 @@ describe('DslCodec.parse — extraction', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.timeline).toHaveLength(1)
-    expect(result.timeline[0].set).toEqual({ 'gaze.x': 1 })
+    expect(result.timeline[0].set).toEqual(sym({ 'gaze.x': 1 }))
   })
 
   it('parses the whole text leniently when there is no fenced block', () => {
@@ -211,6 +257,6 @@ describe('DslCodec.parse — extraction', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.timeline).toHaveLength(1)
-    expect(result.timeline[0].set).toEqual({ 'gaze.x': 0.2, 'eye.open': 0.9 })
+    expect(result.timeline[0].set).toEqual(sym({ 'gaze.x': 0.2, 'eye.open': 0.9 }))
   })
 })

@@ -42,22 +42,30 @@ Corollaries:
 An expression is nothing more than a point in a small, named, bounded space. There are
 no free-form drawings; every possible face is one assignment of these values:
 
-| Parameter    | Range      | Meaning (purely geometric)                                   |
+| Control      | Range      | Meaning (purely geometric)                                   |
 | ------------ | ---------- | ------------------------------------------------------------ |
 | `eye.open`   | `0 … 1`    | eyelid aperture: `0` fully closed → `1` wide open            |
 | `eye.pupil`  | `0 … 1`    | pupil diameter: `0` constricted → `1` fully dilated          |
-| `brow.angle` | `-1 … 1`   | brow tilt: `-1` inner ends rotated down → `0` level → `1` inner ends rotated up |
+| `brow.angle` | `-1 … 1`   | brow tilt: `-1` inner end rotated down → `0` level → `1` inner end rotated up |
 | `gaze.x`     | `-1 … 1`   | horizontal eye direction: `-1` full left → `0` center → `1` full right (viewer's perspective) |
 | `gaze.y`     | `-1 … 1`   | vertical eye direction: `-1` looking down → `0` center → `1` looking up |
+
+**Each control exists independently for the left and right side** (viewer's perspective),
+so the actual parameter vector is ten values: `<control>.l` and `<control>.r` — e.g.
+`eye.open.l`, `brow.angle.r`. This is what lets the face be asymmetric: a wink, a single
+cocked brow, an uneven squint, a sideways-only glance. In the DSL the **bare control name
+is symmetric shorthand** that sets both sides at once (`eye.open 0.6` opens both eyes), so
+the common symmetric case stays a short pose; `.l` / `.r` address one side.
 
 Design rules for the parameter space:
 
 - **Mechanical, not emotional.** See the principle above — this is rule zero.
 - **Named and bounded.** Every value has a clamp range; the simulator never renders an
   out-of-range value.
-- **Symmetric by default.** Both eyes share one `eye.open`, `eye.pupil`, and gaze; both
-  brows share one `brow.angle`. No per-side asymmetry in the core set (see *Future
-  directions*).
+- **Per-side, symmetric by convention.** Every control has a `.l` and a `.r` parameter, but
+  the DSL shorthand sets both together, so a face is symmetric unless the model *chooses* to
+  split a side. A control's range, neutral, and geometry are defined once and shared by both
+  sides — asymmetry is in the *values*, never a separate "wink" or "smirk" knob.
 - **Continuous.** Values are real numbers, so expressions can be subtle, not just
   presets. The model picks `0.62`, not just "open" or "closed."
 
@@ -109,6 +117,12 @@ state                # ask the simulator to report the current vector
 tween 120 ; gaze.x -0.8 ; eye.open 0.5 ; brow.angle -0.3
 hold 500
 tween 300 ; gaze.x 0 ; eye.open 0.8 ; brow.angle 0
+
+# an asymmetric pose — a wink with a single cocked brow
+tween 200
+eye.open.l 0         # close only the left eye
+eye.open.r 0.9       # right eye stays open
+brow.angle.r 0.4     # tilt only the right brow up
 ```
 
 Grammar sketch (v1):
@@ -116,13 +130,16 @@ Grammar sketch (v1):
 ```text
 program    := statement ( (";" | newline) statement )*
 statement  := set | tween | hold | state | done | comment
-set        := PARAM NUMBER            # e.g.  gaze.x -0.8
+set        := PARAM NUMBER            # e.g.  gaze.x -0.8  (both eyes)  |  eye.open.l 0
 tween      := "tween" INT_MS          # animation duration for the sets that follow
 hold       := "hold" INT_MS           # pause, for timed sequences / micro-expressions
 state      := "state"                 # request current vector back
 done       := "done"                  # the model is satisfied; ends the refine loop
 comment    := "#" ...to end of line
-PARAM      := eye.open | eye.pupil | brow.angle | gaze.x | gaze.y
+PARAM      := CONTROL                  # bare control = symmetric shorthand, sets BOTH sides
+            | CONTROL "." SIDE         # one side only, e.g.  brow.angle.r 0.4
+CONTROL    := eye.open | eye.pupil | brow.angle | gaze.x | gaze.y
+SIDE       := "l" | "r"                # viewer's left / right
 ```
 
 Semantics:
@@ -132,6 +149,8 @@ Semantics:
   none is given).
 - Values are **clamped** to each parameter's range; unknown params or malformed lines are
   reported back as errors rather than silently dropped.
+- A bare control name expands to **both** `.l` and `.r`; because sets fold last-write-wins,
+  a later per-side set overrides one side (`eye.open 0.5 ; eye.open.l 0` is a wink).
 - `hold` + multiple batches let the model **choreograph a sequence** — not just one
   static pose. Sequences are a first-class capability of the v1 DSL.
 
@@ -182,9 +201,10 @@ down-and-in, glance sideways for suspicion…") paired with the **face that resu
 
 **In scope (v1 / MVP):**
 
-- The **five** core parameters above (eyes + brows + gaze), rendered as an animated SVG
-  face in the browser, over a static neutral mouth.
-- The v1 DSL (`set` / `tween` / `hold` / `state`), including **timed sequences**.
+- The **five** core controls above (eyes + brows + gaze), each **per side** (ten
+  parameters), rendered as an animated SVG face in the browser, over a static neutral mouth.
+- The v1 DSL (`set` / `tween` / `hold` / `state`), including **timed sequences** and the
+  per-side / symmetric-shorthand set forms.
 - An agentic loop that feeds a feeling/situation, runs the model, and applies its DSL.
 - A live browser view for a human to watch, plus textual state reporting to the model.
 
@@ -194,27 +214,30 @@ down-and-in, glance sideways for suspicion…") paired with the **face that resu
 - **Automated scoring / judging.** No round-trip guessing, no eval metrics — we express
   and observe. (See *Future directions*.)
 - **Vision feedback.** The model reasons from the numeric state, not from an image.
-- **Per-side asymmetry, head pose/tilt, color/skin, secondary features** (nose, ears,
-  tears).
+- **Head pose/tilt, color/skin, secondary features** (nose, ears, tears).
 - **Idle animation, personality persistence across prompts, speech.**
 
 ## Future directions
 
 - **Mouth control** — the first expansion. Likely `mouth.curve` (`-1` down-turned → `1`
   up-turned) and `mouth.open` (`0` closed → `1` agape); the latter is what unlocks
-  surprise/shock. Kept mechanical, never a `smile` knob.
+  surprise/shock. Kept mechanical, never a `smile` knob. Note: every control is per-side by
+  default now, so a mouth would be the first place to ask whether a single shared axis fits
+  better than an `.l`/`.r` split.
 - **Round-trip validation ("emotional charades").** A second model — blind to the target
   — sees the rendered face and guesses the emotion; agreement becomes a self-scoring,
   repeatable success metric. The natural next step once v1 feels right.
-- **Per-side asymmetry** (per-eye, per-brow) for winks, smirks, single raised brow.
 - **Named, reusable gesture sequences** as first-class objects (a library of
   micro-expressions the model can invoke by name).
 - **Human vs. model comparison** — do people read the model's faces the way it intended?
 
 ## Glossary
 
+- **Control** — one geometric quantity (e.g. `eye.open`); each control exists per side as
+  two **parameters**, `.l` and `.r`. There are five controls, ten parameters.
+- **Parameter** — one per-side value (e.g. `eye.open.l`); the smallest thing the face stores.
 - **Expression / pose** — one assignment of all parameters; a point in the face space.
-- **Vector** — the full ordered set of current parameter values.
+- **Vector** — the full ordered set of current parameter values (all ten).
 - **Tween** — the timed interpolation from the current vector to a target vector.
 - **Program** — one block of DSL the model emits in a turn.
 - **Sequence** — a program using `hold` to choreograph multiple poses over time.

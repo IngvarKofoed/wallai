@@ -12,9 +12,10 @@
 2. **A stable core.** A tiny set of shared data contracts (the face vector, the animation
    timeline) is the lingua franca between the seams. Everything else is replaceable; these
    contracts change rarely.
-3. **The face parameters have one home.** A single `PARAMS` spec defines every parameter,
-   its range, and its description. Clamping, validation, and (most of) the prompt text are
-   *derived* from it — so adding a parameter is a near-one-file change.
+3. **The face parameters have one home.** A single `CONTROLS` spec defines every control,
+   its range, and its description; the per-side `PARAMS` vector is *derived* from it
+   (`CONTROLS × SIDES`). Clamping, validation, and (most of) the prompt text derive from
+   `PARAMS`/`CONTROLS` in turn — so adding a control is a near-one-file change.
 4. **Single source of truth for state.** One component owns the authoritative face vector
    and answers "what does the face look like now"; the renderer is a visual sink.
 
@@ -65,16 +66,23 @@ The center of the system. Small, stable, shared by server and browser.
 
 ```ts
 // params.ts — the ONE home for the parameter space (see CONCEPT "mechanical, not emotional")
-export const PARAMS = {
+// A control is defined ONCE; its two per-side parameters (`.l`/`.r`) are derived from
+// CONTROLS × SIDES, so the face can be asymmetric (a wink, a cocked brow) with no per-side
+// prose. The bare-control "symmetric shorthand" is a DSL convenience (codecs/dsl.ts), not
+// a core concept — this module speaks only per-side ParamNames.
+export const CONTROLS = {
   'eye.open':   { min: 0,  max: 1,  describe: 'eyelid aperture: 0 closed → 1 wide open' },
   'eye.pupil':  { min: 0,  max: 1,  describe: 'pupil diameter: 0 constricted → 1 dilated' },
-  'brow.angle': { min: -1, max: 1,  describe: 'brow tilt: -1 inner ends down → 1 inner ends up' },
-  'gaze.x':     { min: -1, max: 1,  describe: 'eyes horizontal: -1 left → 0 center → 1 right' },
-  'gaze.y':     { min: -1, max: 1,  describe: 'eyes vertical: -1 down → 0 center → 1 up' },
+  'brow.angle': { min: -1, max: 1,  describe: 'brow tilt: -1 inner end down → 1 inner end up' },
+  'gaze.x':     { min: -1, max: 1,  describe: 'eye horizontal: -1 left → 0 center → 1 right' },
+  'gaze.y':     { min: -1, max: 1,  describe: 'eye vertical: -1 down → 0 center → 1 up' },
 } as const;
 
-export type ParamName = keyof typeof PARAMS;
-export type FaceVector = Record<ParamName, number>;   // a full pose
+export const SIDES = ['l', 'r'] as const;             // viewer's left / right
+export type ControlName = keyof typeof CONTROLS;
+export type ParamName = `${ControlName}.${(typeof SIDES)[number]}`;   // e.g. 'eye.open.l'
+export const PARAMS = /* derived: CONTROLS × SIDES */ {} as Record<ParamName, /* spec */ unknown>;
+export type FaceVector = Record<ParamName, number>;   // a full pose (ten values)
 export type PartialVector = Partial<FaceVector>;      // targets touched by one step
 
 // timeline.ts — the format-agnostic animation IR every Codec produces
@@ -154,8 +162,9 @@ Implementations:
 - When `mcp` is built, its default backing is **in-process tool-use** via the provider (same
   model-facing behavior as MCP, less infra); a real standalone MCP server is an even-later
   option behind the same id.
-- The DSL/JSON `describe()` outputs are **generated from `PARAMS`**, so a new parameter
-  documents itself without editing prose.
+- The DSL/JSON `describe()` outputs are **generated from `CONTROLS`** (the model-facing table
+  lists the five controls, with per-side `.l`/`.r` addressing explained once), so a new
+  control documents itself without editing prose.
 - A `parse()` failure (bad syntax, unknown param, out-of-range) returns `errors`, which the
   orchestrator feeds back into the conversation so the model can self-correct — a natural
   agentic retry that dovetails with the refine loop (§7).
@@ -245,7 +254,7 @@ const orchestrator = new Orchestrator({ llm, codec, renderer, faceState });
 docs/                     CONCEPT.md, ARCHITECTURE.md, CHANGELOG.md
 src/
   core/                   the stable center — depended on by everything
-    params.ts             PARAMS spec + clamp/validate (the ONE parameter home)
+    params.ts             CONTROLS spec → per-side PARAMS + clamp/validate (the ONE parameter home)
     timeline.ts           Step / Timeline types
     faceState.ts          authoritative vector + fold/apply
     prompt.ts             BASE_PROMPT (task + mechanical principle + param table)
@@ -270,9 +279,11 @@ src/
 
 ## 10. Extensibility (worked cases)
 
-- **Add the mouth later.** Add `mouth.curve` (and `mouth.open`) to `PARAMS`; draw them in
-  `web/face.ts`. The DSL codec's `describe()` picks them up automatically (generated from
-  `PARAMS`). No orchestrator or loop changes.
+- **Add the mouth later.** Add `mouth.curve` (and `mouth.open`) to `CONTROLS`; draw them in
+  `web/face.ts`. The per-side `PARAMS`, clamping, the prompt table, and the DSL codec's
+  `describe()` all pick them up automatically. No orchestrator or loop changes. (If a mouth
+  control should *not* be per-side, that's the point where the single-axis SIDES assumption
+  would need revisiting — today every control is split.)
 - **Add the JSON or MCP codec.** Implement `Codec`, register the id, set `CODEC=…`. The
   prompt's command section (and, for MCP, the provider's `tools`) swap together via
   `describe()`; nothing else moves.

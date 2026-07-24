@@ -4,12 +4,12 @@
 // automatically (ARCHITECTURE §5.2). No DSL/JSON/MCP syntax is hard-coded here.
 
 import type { PromptContribution } from './llm-types'
-import { PARAMS, PARAM_NAMES } from './params'
+import { CONTROLS, CONTROL_NAMES } from './params'
 
-/** Build the auto-generated parameter table by iterating PARAMS — never hard-coded. */
+/** Build the auto-generated control table by iterating CONTROLS — never hard-coded. */
 function parameterTable(): string {
-  const lines = PARAM_NAMES.map((name) => {
-    const { min, max, describe } = PARAMS[name]
+  const lines = CONTROL_NAMES.map((name) => {
+    const { min, max, describe } = CONTROLS[name]
     return `- ${name} (range ${min} to ${max}): ${describe}`
   })
   return lines.join('\n')
@@ -32,8 +32,11 @@ open, how dilated, how rotated, where pointed — and never a feeling. There is 
 "angry", or "happy" knob. The feeling lives in the prompt you are given; your task is to
 translate it into these physical settings yourself.`,
 
-    // (c) the auto-generated parameter table
-    `The face has these controls:\n${parameterTable()}`,
+    // (c) the auto-generated control table, plus the per-side capability (stated as a
+    // fact about the face, not DSL syntax — the codec teaches how to address each side).
+    `The face has these controls, and each one exists independently for the LEFT and the
+RIGHT side (viewer's perspective). So the face can be asymmetric — a wink, one brow cocked,
+the eyes narrowed unevenly — not only mirror-symmetric:\n${parameterTable()}`,
 
     // (d) guidance: expression is movement
     `Expression is movement, not just a static pose. You may choreograph a sequence over

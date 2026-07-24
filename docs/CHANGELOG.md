@@ -64,3 +64,13 @@ Each entry is numbered with a monotonically increasing integer. Append new entri
     (Run submit → runEnded), so it needs no protocol change and spans the whole run, not
     just the LLM-wait gaps. Honors `prefers-reduced-motion` (static ring, no sweep).
 
+13. Every control is now PER SIDE — ten params (`eye.open.l`/`.r`, …) derived from
+    `CONTROLS` × `SIDES` — so the face can be asymmetric (wink, single cocked brow,
+    independent per-eye gaze). Gaze was split too, deliberately, despite reading as a lazy
+    eye; chosen anyway — don't revert it.
+    DSL keeps a symmetric shorthand: bare `eye.open 0.6` sets both sides, `.l`/`.r` one,
+    later set overrides earlier (last-write-wins), so `eye.open 0.5 ; eye.open.l 0` winks.
+    Core stores per-side params only (shorthand + symmetric-pair collapse in `formatVector`
+    live in the codec/format layer) — rejected symmetric params in core, which would force
+    override special-casing throughout.
+

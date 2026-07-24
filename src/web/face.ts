@@ -5,7 +5,7 @@
 // a STATIC neutral shape drawn once and never animated — mouth control is out of MVP
 // scope. There is no smile/angry/happy anywhere; only numbers become shapes.
 
-import type { FaceVector, ParamName } from '../core/params'
+import type { FaceVector, ParamName, Side } from '../core/params'
 import { NEUTRAL, PARAM_NAMES, clampVector } from '../core/params'
 import type { Timeline } from '../core/timeline'
 
@@ -77,9 +77,11 @@ export interface FaceGeometry {
   rightBrow: BrowGeometry
 }
 
-function eyeGeometry(cx: number, v: FaceVector): EyeGeometry {
-  const open = clamp(v['eye.open'], 0, 1)
-  const pupil = clamp(v['eye.pupil'], 0, 1)
+function eyeGeometry(cx: number, side: Side, v: FaceVector): EyeGeometry {
+  // Every control is per-side now, so each eye reads its own open/pupil/gaze — this is
+  // what lets the two eyes differ (a wink, an uneven squint, a sideways-only glance).
+  const open = clamp(v[`eye.open.${side}`], 0, 1)
+  const pupil = clamp(v[`eye.pupil.${side}`], 0, 1)
   const ry = lerp(GEO.eyeRyMin, GEO.eyeRyMax, open)
   const rx = GEO.eyeRx
 
@@ -87,8 +89,8 @@ function eyeGeometry(cx: number, v: FaceVector): EyeGeometry {
   // visible aperture (which shrinks as the eye closes).
   const dxLimit = rx - GEO.irisR
   const dyLimit = Math.max(0, ry - GEO.pupilRMax * 0.5)
-  const dx = clamp(v['gaze.x'] * GEO.maxGazeX, -dxLimit, dxLimit)
-  const dy = clamp(-v['gaze.y'] * GEO.maxGazeY, -dyLimit, dyLimit) // +gaze.y = up = -y
+  const dx = clamp(v[`gaze.x.${side}`] * GEO.maxGazeX, -dxLimit, dxLimit)
+  const dy = clamp(-v[`gaze.y.${side}`] * GEO.maxGazeY, -dyLimit, dyLimit) // +gaze.y = up = -y
 
   return {
     cx,
@@ -101,11 +103,11 @@ function eyeGeometry(cx: number, v: FaceVector): EyeGeometry {
   }
 }
 
-function browGeometry(cx: number, mirror: boolean, v: FaceVector): BrowGeometry {
-  const angle = clamp(v['brow.angle'], -1, 1)
+function browGeometry(cx: number, side: Side, mirror: boolean, v: FaceVector): BrowGeometry {
+  const angle = clamp(v[`brow.angle.${side}`], -1, 1)
   // brow.angle > 0 => inner ends rotate UP. The inner end is the one nearest the
-  // face centre, which is mirrored between the two brows — so the two rotations
-  // are negatives of each other.
+  // face centre, which is mirrored between the two brows — so a matching brow.angle on
+  // both sides tilts symmetrically; the per-side values let one brow cock on its own.
   const rot = angle * GEO.maxBrowDeg
   return {
     x: cx - GEO.browW / 2,
@@ -119,10 +121,10 @@ function browGeometry(cx: number, mirror: boolean, v: FaceVector): BrowGeometry 
 /** Pure: map a full vector to the geometry of every drawn part. */
 export function computeGeometry(v: FaceVector): FaceGeometry {
   return {
-    left: eyeGeometry(GEO.leftCx, v),
-    right: eyeGeometry(GEO.rightCx, v),
-    leftBrow: browGeometry(GEO.leftCx, false, v),
-    rightBrow: browGeometry(GEO.rightCx, true, v),
+    left: eyeGeometry(GEO.leftCx, 'l', v),
+    right: eyeGeometry(GEO.rightCx, 'r', v),
+    leftBrow: browGeometry(GEO.leftCx, 'l', false, v),
+    rightBrow: browGeometry(GEO.rightCx, 'r', true, v),
   }
 }
 

@@ -18,7 +18,15 @@ import type { Codec, ParseResult } from './codec'
 import type { ModelOutput, PromptContribution } from '../core/llm-types'
 import type { Step, Timeline } from '../core/timeline'
 import { DEFAULT_TWEEN_MS } from '../core/timeline'
-import { PARAMS, PARAM_NAMES, isParamName, clampValue } from '../core/params'
+import {
+  CONTROLS,
+  CONTROL_NAMES,
+  isParamName,
+  isControlName,
+  sidesOf,
+  clampValue,
+} from '../core/params'
+import type { ParamName } from '../core/params'
 
 /** Matches every fenced block whose opening line is three backticks + `face`. */
 const FACE_BLOCK = /```[ \t]*face[ \t]*\r?\n([\s\S]*?)```/gi
@@ -66,8 +74,8 @@ export class DslCodec implements Codec {
   readonly id = 'dsl'
 
   describe(): PromptContribution {
-    const paramTable = PARAM_NAMES.map((name) => {
-      const p = PARAMS[name]
+    const paramTable = CONTROL_NAMES.map((name) => {
+      const p = CONTROLS[name]
       return `  ${name}   range ${p.min}..${p.max}   ${p.describe}`
     }).join('\n')
 
@@ -93,6 +101,12 @@ Only the LAST such \`face\` block in your reply is executed, so write one block.
   # ...              a comment, to end of line
 
 ### Parameters (purely geometric — pick real numbers, e.g. 0.62, not just "open")
+
+Each control below exists independently for BOTH sides of the face (\`l\` = the eye/brow on
+the viewer's LEFT, \`r\` = the viewer's RIGHT). Writing the bare control name sets both sides
+at once — the usual, symmetric case: \`eye.open 0.6\` opens both eyes. Add \`.l\` or \`.r\` to
+drive ONE side alone, which is how the face becomes asymmetric — \`eye.open.l 0\` closes only
+the left eye (a wink); \`brow.angle.r 0.6\` tilts only the right brow.
 
 ${paramTable}
 
@@ -127,6 +141,16 @@ done
 tween 120 ; gaze.x -0.8 ; eye.open 0.5 ; brow.angle -0.3
 hold 500
 tween 300 ; gaze.x 0 ; eye.open 0.8 ; brow.angle 0
+done
+\`\`\`
+
+### Example — an asymmetric pose (close one eye while the other stays open — a wink)
+
+\`\`\`face
+tween 200
+eye.open.l 0        # left eye shut
+eye.open.r 0.9      # right eye open
+brow.angle.r 0.3    # only the right brow tilts up
 done
 \`\`\``
 
@@ -196,9 +220,26 @@ done
           done = true
           break
         default: {
-          // A set: `<param> <number>`.
-          if (!isParamName(head)) {
-            errors.push(`unknown parameter "${head}"`)
+          // A set: `<param> <number>`. `<param>` is either a per-side parameter name
+          // (`eye.open.l`) or a bare control name (`eye.open`) used as SYMMETRIC SHORTHAND
+          // that sets both sides at once. Anything else is an unknown parameter.
+          const targets: ParamName[] | null = isParamName(head)
+            ? [head]
+            : isControlName(head)
+              ? sidesOf(head)
+              : null
+          if (!targets) {
+            // If it's a KNOWN control with a bad side suffix (e.g. `eye.open.x`), hint the
+            // valid forms so the model can self-correct, rather than a generic message.
+            const dot = head.lastIndexOf('.')
+            const base = dot > 0 ? head.slice(0, dot) : ''
+            if (base && isControlName(base)) {
+              errors.push(
+                `${head}: unknown side "${head.slice(dot + 1)}" — use ${base}.l or ${base}.r (or ${base} for both)`,
+              )
+            } else {
+              errors.push(`unknown parameter "${head}"`)
+            }
             break
           }
           if (tokens.length < 2) {
@@ -214,7 +255,7 @@ done
           // CONCEPT §3 promise the model), not rejected. Only unknown names and
           // non-numeric values are errors.
           if (!current) current = { set: {}, tweenMs: currentTween, holdMs: 0 }
-          current.set[head] = clampValue(head, value)
+          for (const name of targets) current.set[name] = clampValue(name, value)
           break
         }
       }
